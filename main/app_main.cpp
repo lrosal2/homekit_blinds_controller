@@ -42,22 +42,18 @@ extern "C" void app_main(void)
 
     ESP_LOGI(TAG, "Moving forward %ld steps...", (long)test_steps);
     stepper_move_steps(motor, test_steps);
-    ESP_LOGI(TAG, "Position: %ld", (long)stepper_get_position(motor));
+    stepper_release(motor);
+    ESP_LOGI(TAG, "Position: %ld -- coils released, measure current now (expect ~0A)",
+             (long)stepper_get_position(motor));
 
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    ESP_LOGI(TAG, "Pausing 5 seconds -- check motor current draw...");
+    vTaskDelay(pdMS_TO_TICKS(5000));
 
     ESP_LOGI(TAG, "Moving backward %ld steps...", (long)test_steps);
     stepper_move_steps(motor, -test_steps);
-    ESP_LOGI(TAG, "Position: %ld", (long)stepper_get_position(motor));
-
-    /* Release coils to save power */
     stepper_release(motor);
+    ESP_LOGI(TAG, "Position: %ld -- coils released, measure current now (expect ~0A)",
+             (long)stepper_get_position(motor));
 
-    ESP_LOGI(TAG, "Motor test complete. You should have seen the shaft "
-                  "rotate ~180 degrees and return.");
-    ESP_LOGI(TAG, "If the motor didn't move, check your wiring:");
-    ESP_LOGI(TAG, "  ESP32-C6 D0 (GPIO0) -> ULN2003 IN1");
-    ESP_LOGI(TAG, "  ESP32-C6 D1 (GPIO1) -> ULN2003 IN2");
-    ESP_LOGI(TAG, "  ESP32-C6 D2 (GPIO2) -> ULN2003 IN3");
-    ESP_LOGI(TAG, "  ESP32-C6 D3 (GPIO3) -> ULN2003 IN4");
+    ESP_LOGI(TAG, "Motor test complete. Coils are released -- motor current should be ~0A.");
 }
