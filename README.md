@@ -18,10 +18,10 @@ Matter-over-Thread smart blinds controller using ESP32-C6.
 ```
 ESP32-C6       ULN2003
 --------       -------
-GPIO2    --->  IN1
-GPIO3    --->  IN2
-GPIO4    --->  IN3
-GPIO5    --->  IN4
+D0 (GPIO0) --->  IN1
+D1 (GPIO1) --->  IN2
+D2 (GPIO2) --->  IN3
+D3 (GPIO3) --->  IN4
 GND      --->  GND
 
 ULN2003 power: connect 5V and GND to an external 5V supply or USB breakout.
