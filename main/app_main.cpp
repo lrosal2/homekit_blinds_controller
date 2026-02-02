@@ -38,27 +38,27 @@ extern "C" void app_main(void)
 
     stepper_set_rpm(motor, 10);
 
-    /* Test: rotate forward half a revolution, then back */
     int32_t test_steps = STEPS_ONE_REV / 2;
+    int cycle = 0;
 
-    ESP_LOGI(TAG, "Moving forward %ld steps...", (long)test_steps);
-    stepper_move_steps(motor, test_steps);
-    ESP_LOGI(TAG, "Position: %ld", (long)stepper_get_position(motor));
+    while (1) {
+        cycle++;
+        ESP_LOGI(TAG, "--- Cycle %d ---", cycle);
 
-    vTaskDelay(pdMS_TO_TICKS(1000));
+        ESP_LOGI(TAG, "Moving forward %ld steps...", (long)test_steps);
+        stepper_move_steps(motor, test_steps);
+        stepper_release(motor);
+        ESP_LOGI(TAG, "Coils released -- measure current (expect ~0A)");
 
-    ESP_LOGI(TAG, "Moving backward %ld steps...", (long)test_steps);
-    stepper_move_steps(motor, -test_steps);
-    ESP_LOGI(TAG, "Position: %ld", (long)stepper_get_position(motor));
+        ESP_LOGI(TAG, "Idle for 5 seconds...");
+        vTaskDelay(pdMS_TO_TICKS(5000));
 
-    /* Release coils to save power */
-    stepper_release(motor);
+        ESP_LOGI(TAG, "Moving backward %ld steps...", (long)test_steps);
+        stepper_move_steps(motor, -test_steps);
+        stepper_release(motor);
+        ESP_LOGI(TAG, "Coils released -- measure current (expect ~0A)");
 
-    ESP_LOGI(TAG, "Motor test complete. You should have seen the shaft "
-                  "rotate ~180 degrees and return.");
-    ESP_LOGI(TAG, "If the motor didn't move, check your wiring:");
-    ESP_LOGI(TAG, "  ESP32-C6 D0 (GPIO0)  -> ULN2003 IN1");
-    ESP_LOGI(TAG, "  ESP32-C6 D1 (GPIO1)  -> ULN2003 IN2");
-    ESP_LOGI(TAG, "  ESP32-C6 D2 (GPIO2)  -> ULN2003 IN3");
-    ESP_LOGI(TAG, "  ESP32-C6 D3 (GPIO21) -> ULN2003 IN4");
+        ESP_LOGI(TAG, "Idle for 5 seconds...");
+        vTaskDelay(pdMS_TO_TICKS(5000));
+    }
 }
