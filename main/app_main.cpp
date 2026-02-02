@@ -7,11 +7,12 @@
 static const char *TAG = "main";
 
 /* GPIO pin assignments for ULN2003 driver board
- * D0-IN1, D1-IN2, D2-IN3, D3-IN4 */
-#define STEPPER_PIN_IN1  GPIO_NUM_0
-#define STEPPER_PIN_IN2  GPIO_NUM_1
-#define STEPPER_PIN_IN3  GPIO_NUM_2
-#define STEPPER_PIN_IN4  GPIO_NUM_3
+ * Seeed XIAO ESP32-C6 pin mapping:
+ *   D0=GPIO0, D1=GPIO1, D2=GPIO2, D3=GPIO21 */
+#define STEPPER_PIN_IN1  GPIO_NUM_0   /* D0 -> IN1 */
+#define STEPPER_PIN_IN2  GPIO_NUM_1   /* D1 -> IN2 */
+#define STEPPER_PIN_IN3  GPIO_NUM_2   /* D2 -> IN3 */
+#define STEPPER_PIN_IN4  GPIO_NUM_21  /* D3 -> IN4 */
 
 /* 28BYJ-48 half-step: 4076 steps = one full revolution of output shaft */
 #define STEPS_ONE_REV    4076
@@ -56,8 +57,8 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "Motor test complete. You should have seen the shaft "
                   "rotate ~180 degrees and return.");
     ESP_LOGI(TAG, "If the motor didn't move, check your wiring:");
-    ESP_LOGI(TAG, "  ESP32-C6 D0 (GPIO0) -> ULN2003 IN1");
-    ESP_LOGI(TAG, "  ESP32-C6 D1 (GPIO1) -> ULN2003 IN2");
-    ESP_LOGI(TAG, "  ESP32-C6 D2 (GPIO2) -> ULN2003 IN3");
-    ESP_LOGI(TAG, "  ESP32-C6 D3 (GPIO3) -> ULN2003 IN4");
+    ESP_LOGI(TAG, "  ESP32-C6 D0 (GPIO0)  -> ULN2003 IN1");
+    ESP_LOGI(TAG, "  ESP32-C6 D1 (GPIO1)  -> ULN2003 IN2");
+    ESP_LOGI(TAG, "  ESP32-C6 D2 (GPIO2)  -> ULN2003 IN3");
+    ESP_LOGI(TAG, "  ESP32-C6 D3 (GPIO21) -> ULN2003 IN4");
 }
