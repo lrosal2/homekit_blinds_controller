@@ -17,6 +17,9 @@
 
 typedef void *app_driver_handle_t;
 
+/** Initialize the stepper motor driver */
+esp_err_t app_driver_stepper_init(void);
+
 /** Initialize the button driver */
 app_driver_handle_t app_driver_button_init();
 

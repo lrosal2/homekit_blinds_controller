@@ -13,6 +13,7 @@
 #include <esp_matter.h>
 #include "bsp/esp-bsp.h"
 
+#include <stepper_driver.h>
 #include <app_priv.h>
 
 using namespace chip::app::Clusters;
@@ -20,6 +21,31 @@ using namespace esp_matter;
 
 static const char *TAG = "app_driver";
 extern uint16_t window_covering_endpoint_id;
+
+/* Stepper motor: Seeed XIAO ESP32-C6 pins D0-D3 */
+#define STEPPER_IN1 GPIO_NUM_0
+#define STEPPER_IN2 GPIO_NUM_1
+#define STEPPER_IN3 GPIO_NUM_2
+#define STEPPER_IN4 GPIO_NUM_21
+
+static stepper_handle_t s_stepper = NULL;
+
+esp_err_t app_driver_stepper_init(void)
+{
+    stepper_config_t config = {
+        .pin_in1 = STEPPER_IN1,
+        .pin_in2 = STEPPER_IN2,
+        .pin_in3 = STEPPER_IN3,
+        .pin_in4 = STEPPER_IN4,
+        .mode = STEPPER_MODE_FULL_STEP,
+    };
+    esp_err_t err = stepper_init(&config, &s_stepper);
+    if (err == ESP_OK) {
+        stepper_set_rpm(s_stepper, 10);
+        stepper_release(s_stepper);
+    }
+    return err;
+}
 
 static esp_err_t app_driver_window_covering_set_position(esp_matter_attr_val_t *val)
 {
