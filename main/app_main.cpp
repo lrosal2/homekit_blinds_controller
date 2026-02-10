@@ -150,8 +150,12 @@ extern "C" void app_main()
     window_covering_endpoint_id = endpoint::get_id(endpoint);
     ESP_LOGI(TAG, "Window Covering created with endpoint_id %d", window_covering_endpoint_id);
 
-    /* Add position-aware lift feature so Apple Home shows a position slider */
+    /* Add lift feature first (required before position_aware_lift) */
     cluster_t *wc_cluster = cluster::get(endpoint, WindowCovering::Id);
+    cluster::window_covering::feature::lift::config_t lift_config;
+    cluster::window_covering::feature::lift::add(wc_cluster, &lift_config);
+
+    /* Add position-aware lift so Apple Home shows a position slider */
     cluster::window_covering::feature::position_aware_lift::config_t pa_lift_config;
     cluster::window_covering::feature::position_aware_lift::add(wc_cluster, &pa_lift_config);
 
