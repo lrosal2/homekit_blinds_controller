@@ -178,6 +178,19 @@ extern "C" void app_main()
     err = esp_matter::start(app_event_cb);
     ABORT_APP_ON_FAILURE(err == ESP_OK, ESP_LOGE(TAG, "Failed to start Matter, err:%d", err));
 
+    /* Set initial position to fully open (0%) so attributes are not null */
+    {
+        esp_matter_attr_val_t pos_val = esp_matter_nullable_uint16(0);
+        attribute::update(window_covering_endpoint_id, WindowCovering::Id,
+            WindowCovering::Attributes::CurrentPositionLiftPercent100ths::Id, &pos_val);
+        attribute::update(window_covering_endpoint_id, WindowCovering::Id,
+            WindowCovering::Attributes::TargetPositionLiftPercent100ths::Id, &pos_val);
+
+        esp_matter_attr_val_t pct_val = esp_matter_nullable_uint8(0);
+        attribute::update(window_covering_endpoint_id, WindowCovering::Id,
+            WindowCovering::Attributes::CurrentPositionLiftPercentage::Id, &pct_val);
+    }
+
 #if CONFIG_ENABLE_CHIP_SHELL
     esp_matter::console::diagnostics_register_commands();
     esp_matter::console::wifi_register_commands();
