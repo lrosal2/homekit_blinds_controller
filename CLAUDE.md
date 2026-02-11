@@ -26,6 +26,8 @@
 - `main/app_priv.h` — private declarations
 - `components/stepper/` — stepper motor driver component
 
-## Known Issues
-- stepper_move_steps() blocks the CHIP task thread, triggers watchdog on long moves (~6s for 2048 steps)
-- Future fix: move stepper to a separate FreeRTOS task
+## Architecture Notes
+- Stepper runs on dedicated FreeRTOS task (priority 5, 4KB stack)
+- Queue depth 1 with xQueueOverwrite — only latest target position matters
+- stepper_driver.c yields every 20 steps (vTaskDelay(1)) — required for single-core ESP32-C6
+- CHIP stack must be locked (LockChipStack/UnlockChipStack) when updating attributes from stepper task
