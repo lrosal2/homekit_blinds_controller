@@ -11,7 +11,11 @@
 #include <string.h>
 
 #include <esp_matter.h>
+#include <platform/PlatformManager.h>
 #include "bsp/esp-bsp.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
 
 #include <stepper_driver.h>
 #include <app_priv.h>
@@ -33,6 +37,49 @@ static stepper_handle_t s_stepper = NULL;
 /* Full travel = 1 revolution of 28BYJ-48 output shaft */
 #define STEPPER_FULL_TRAVEL_STEPS 2048
 
+/* FreeRTOS task and queue for non-blocking stepper control */
+static QueueHandle_t s_stepper_queue = NULL;
+static TaskHandle_t s_stepper_task = NULL;
+
+typedef struct {
+    uint16_t target_percent100ths;
+} stepper_cmd_t;
+
+static void stepper_task(void *arg)
+{
+    stepper_cmd_t cmd;
+    while (true) {
+        if (xQueueReceive(s_stepper_queue, &cmd, portMAX_DELAY) == pdTRUE) {
+            int32_t target_steps = (int32_t)cmd.target_percent100ths * STEPPER_FULL_TRAVEL_STEPS / 10000;
+            int32_t current_steps = stepper_get_position(s_stepper);
+            int32_t delta = target_steps - current_steps;
+
+            if (delta != 0) {
+                ESP_LOGI(TAG, "Moving stepper: %d -> %d (%d steps)", (int)current_steps, (int)target_steps, (int)delta);
+                stepper_move_steps(s_stepper, delta);
+                stepper_release(s_stepper);
+            }
+
+            /* Report that we've reached the target position (lock CHIP stack for thread safety) */
+            chip::DeviceLayer::PlatformMgr().LockChipStack();
+
+            esp_matter_attr_val_t current_val = esp_matter_nullable_uint16(cmd.target_percent100ths);
+            attribute::update(window_covering_endpoint_id, WindowCovering::Id,
+                WindowCovering::Attributes::CurrentPositionLiftPercent100ths::Id, &current_val);
+
+            esp_matter_attr_val_t pct_val = esp_matter_nullable_uint8((uint8_t)(cmd.target_percent100ths / 100));
+            attribute::update(window_covering_endpoint_id, WindowCovering::Id,
+                WindowCovering::Attributes::CurrentPositionLiftPercentage::Id, &pct_val);
+
+            esp_matter_attr_val_t status_val = esp_matter_uint8(0);
+            attribute::update(window_covering_endpoint_id, WindowCovering::Id,
+                WindowCovering::Attributes::OperationalStatus::Id, &status_val);
+
+            chip::DeviceLayer::PlatformMgr().UnlockChipStack();
+        }
+    }
+}
+
 esp_err_t app_driver_stepper_init(void)
 {
     stepper_config_t config = {
@@ -47,38 +94,30 @@ esp_err_t app_driver_stepper_init(void)
         stepper_set_rpm(s_stepper, 10);
         stepper_release(s_stepper);
     }
+
+    s_stepper_queue = xQueueCreate(1, sizeof(stepper_cmd_t));
+    if (!s_stepper_queue) {
+        ESP_LOGE(TAG, "Failed to create stepper queue");
+        return ESP_ERR_NO_MEM;
+    }
+
+    BaseType_t ret = xTaskCreate(stepper_task, "stepper", 4096, NULL, 5, &s_stepper_task);
+    if (ret != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create stepper task");
+        return ESP_FAIL;
+    }
+
     return err;
 }
 
 static esp_err_t app_driver_window_covering_set_position(esp_matter_attr_val_t *val)
 {
-    /* Position is in percent100ths: 0 = fully open, 10000 = fully closed */
     uint16_t target_percent100ths = val->val.u16;
     ESP_LOGI(TAG, "Window covering target position: %d (%.1f%%)", target_percent100ths, (float)target_percent100ths / 100.0);
 
-    /* Convert percent100ths to steps */
-    int32_t target_steps = (int32_t)target_percent100ths * STEPPER_FULL_TRAVEL_STEPS / 10000;
-    int32_t current_steps = stepper_get_position(s_stepper);
-    int32_t delta = target_steps - current_steps;
-
-    if (delta != 0) {
-        ESP_LOGI(TAG, "Moving stepper: %d -> %d (%d steps)", (int)current_steps, (int)target_steps, (int)delta);
-        stepper_move_steps(s_stepper, delta);
-        stepper_release(s_stepper);
-    }
-
-    /* Report that we've reached the target position */
-    esp_matter_attr_val_t current_val = esp_matter_nullable_uint16(target_percent100ths);
-    attribute::update(window_covering_endpoint_id, WindowCovering::Id,
-        WindowCovering::Attributes::CurrentPositionLiftPercent100ths::Id, &current_val);
-
-    esp_matter_attr_val_t pct_val = esp_matter_nullable_uint8((uint8_t)(target_percent100ths / 100));
-    attribute::update(window_covering_endpoint_id, WindowCovering::Id,
-        WindowCovering::Attributes::CurrentPositionLiftPercentage::Id, &pct_val);
-
-    esp_matter_attr_val_t status_val = esp_matter_uint8(0);
-    attribute::update(window_covering_endpoint_id, WindowCovering::Id,
-        WindowCovering::Attributes::OperationalStatus::Id, &status_val);
+    stepper_cmd_t cmd = { .target_percent100ths = target_percent100ths };
+    /* Overwrite any pending command — only the latest target matters */
+    xQueueOverwrite(s_stepper_queue, &cmd);
 
     return ESP_OK;
 }
