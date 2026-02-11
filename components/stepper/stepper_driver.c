@@ -134,11 +134,22 @@ esp_err_t stepper_move_steps(stepper_handle_t handle, int32_t steps)
     ESP_LOGI(TAG, "Moving %ld steps (%s)", (long)steps,
              direction > 0 ? "CW" : "CCW");
 
+    /* Yield every YIELD_STEPS to let other FreeRTOS tasks run.
+     * Critical on single-core ESP32-C6 where esp_rom_delay_us busy-waits. */
+    #define YIELD_STEPS 20
+
+    int32_t step_count = 0;
     while (remaining > 0) {
         step_once(handle, direction);
         handle->position += direction;
         remaining--;
+        step_count++;
         esp_rom_delay_us(handle->step_delay_us);
+
+        if (step_count >= YIELD_STEPS) {
+            step_count = 0;
+            vTaskDelay(1);
+        }
     }
 
     return ESP_OK;
