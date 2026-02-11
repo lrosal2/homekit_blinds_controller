@@ -30,6 +30,9 @@ extern uint16_t window_covering_endpoint_id;
 
 static stepper_handle_t s_stepper = NULL;
 
+/* Full travel = 1 revolution of 28BYJ-48 output shaft */
+#define STEPPER_FULL_TRAVEL_STEPS 2048
+
 esp_err_t app_driver_stepper_init(void)
 {
     stepper_config_t config = {
@@ -50,20 +53,29 @@ esp_err_t app_driver_stepper_init(void)
 static esp_err_t app_driver_window_covering_set_position(esp_matter_attr_val_t *val)
 {
     /* Position is in percent100ths: 0 = fully open, 10000 = fully closed */
-    ESP_LOGI(TAG, "Window covering target position: %d (%.1f%%)", val->val.u16, (float)val->val.u16 / 100.0);
+    uint16_t target_percent100ths = val->val.u16;
+    ESP_LOGI(TAG, "Window covering target position: %d (%.1f%%)", target_percent100ths, (float)target_percent100ths / 100.0);
 
-    /* For now, instantly report that we've reached the target position.
-     * In Phase C, this is where we'll drive the stepper motor. */
-    esp_matter_attr_val_t current_val = esp_matter_nullable_uint16(val->val.u16);
+    /* Convert percent100ths to steps */
+    int32_t target_steps = (int32_t)target_percent100ths * STEPPER_FULL_TRAVEL_STEPS / 10000;
+    int32_t current_steps = stepper_get_position(s_stepper);
+    int32_t delta = target_steps - current_steps;
+
+    if (delta != 0) {
+        ESP_LOGI(TAG, "Moving stepper: %d -> %d (%d steps)", (int)current_steps, (int)target_steps, (int)delta);
+        stepper_move_steps(s_stepper, delta);
+        stepper_release(s_stepper);
+    }
+
+    /* Report that we've reached the target position */
+    esp_matter_attr_val_t current_val = esp_matter_nullable_uint16(target_percent100ths);
     attribute::update(window_covering_endpoint_id, WindowCovering::Id,
         WindowCovering::Attributes::CurrentPositionLiftPercent100ths::Id, &current_val);
 
-    /* Also update the non-100ths percentage attribute */
-    esp_matter_attr_val_t pct_val = esp_matter_nullable_uint8((uint8_t)(val->val.u16 / 100));
+    esp_matter_attr_val_t pct_val = esp_matter_nullable_uint8((uint8_t)(target_percent100ths / 100));
     attribute::update(window_covering_endpoint_id, WindowCovering::Id,
         WindowCovering::Attributes::CurrentPositionLiftPercentage::Id, &pct_val);
 
-    /* Set operational status to stopped (0) since movement is instant */
     esp_matter_attr_val_t status_val = esp_matter_uint8(0);
     attribute::update(window_covering_endpoint_id, WindowCovering::Id,
         WindowCovering::Attributes::OperationalStatus::Id, &status_val);
