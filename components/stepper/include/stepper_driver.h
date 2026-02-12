@@ -82,6 +82,17 @@ int32_t stepper_get_position(stepper_handle_t handle);
 esp_err_t stepper_reset_position(stepper_handle_t handle);
 
 /**
+ * @brief Set position counter to a specific value (without moving)
+ *
+ * Used to restore a saved position on boot.
+ *
+ * @param handle Stepper handle
+ * @param position The step position to set
+ * @return ESP_OK on success
+ */
+esp_err_t stepper_set_position(stepper_handle_t handle, int32_t position);
+
+/**
  * @brief Free driver resources
  *
  * @param handle Stepper handle

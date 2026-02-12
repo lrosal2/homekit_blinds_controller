@@ -203,6 +203,15 @@ esp_err_t stepper_reset_position(stepper_handle_t handle)
     return ESP_OK;
 }
 
+esp_err_t stepper_set_position(stepper_handle_t handle, int32_t position)
+{
+    if (!handle) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    handle->position = position;
+    return ESP_OK;
+}
+
 esp_err_t stepper_deinit(stepper_handle_t handle)
 {
     if (!handle) {
