@@ -23,6 +23,7 @@
 
 #include <app/server/CommissioningWindowManager.h>
 #include <app/server/Server.h>
+#include <app-common/zap-generated/attributes/Accessors.h>
 
 static const char *TAG = "app_main";
 uint16_t window_covering_endpoint_id = 0;
@@ -193,6 +194,18 @@ extern "C" void app_main()
     /* Matter start */
     err = esp_matter::start(app_event_cb);
     ABORT_APP_ON_FAILURE(err == ESP_OK, ESP_LOGE(TAG, "Failed to start Matter, err:%d", err));
+
+    /* Diagnostic: check NetworkCommissioning cluster on endpoint 0 */
+    {
+        uint32_t ncFeatureMap = 0;
+        auto ncStatus = chip::app::Clusters::NetworkCommissioning::Attributes::FeatureMap::Get(0, &ncFeatureMap);
+        ESP_LOGI(TAG, "DIAG: NetworkCommissioning FeatureMap=0x%lx (status=%d) [1=WiFi,2=Thread,4=Eth]",
+                 (unsigned long)ncFeatureMap, (int)ncStatus);
+
+        bool concurrentConn = false;
+        auto ccStatus = chip::app::Clusters::GeneralCommissioning::Attributes::SupportsConcurrentConnection::Get(0, &concurrentConn);
+        ESP_LOGI(TAG, "DIAG: SupportsConcurrentConnection=%d (status=%d)", concurrentConn, (int)ccStatus);
+    }
 
     /* Set initial position to fully open (0%) so attributes are not null */
     {
