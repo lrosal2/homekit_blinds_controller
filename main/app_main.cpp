@@ -177,6 +177,19 @@ extern "C" void app_main()
     set_openthread_platform_config(&config);
 #endif
 
+    /* Diagnostic: log CHIP network config at compile time */
+    ESP_LOGI(TAG, "DIAG: CHIP_DEVICE_CONFIG_ENABLE_THREAD=%d", CHIP_DEVICE_CONFIG_ENABLE_THREAD);
+#if defined(CHIP_DEVICE_CONFIG_ENABLE_WIFI)
+    ESP_LOGI(TAG, "DIAG: CHIP_DEVICE_CONFIG_ENABLE_WIFI=%d", CHIP_DEVICE_CONFIG_ENABLE_WIFI);
+#else
+    ESP_LOGI(TAG, "DIAG: CHIP_DEVICE_CONFIG_ENABLE_WIFI=undefined");
+#endif
+#if defined(CHIP_DEVICE_CONFIG_ENABLE_WIFI_STATION)
+    ESP_LOGI(TAG, "DIAG: CHIP_DEVICE_CONFIG_ENABLE_WIFI_STATION=%d", CHIP_DEVICE_CONFIG_ENABLE_WIFI_STATION);
+#else
+    ESP_LOGI(TAG, "DIAG: CHIP_DEVICE_CONFIG_ENABLE_WIFI_STATION=undefined");
+#endif
+
     /* Matter start */
     err = esp_matter::start(app_event_cb);
     ABORT_APP_ON_FAILURE(err == ESP_OK, ESP_LOGE(TAG, "Failed to start Matter, err:%d", err));
