@@ -24,6 +24,7 @@
 #include <app/server/CommissioningWindowManager.h>
 #include <app/server/Server.h>
 #include <app-common/zap-generated/attributes/Accessors.h>
+#include <platform/PlatformManager.h>
 
 static const char *TAG = "app_main";
 uint16_t window_covering_endpoint_id = 0;
@@ -197,8 +198,10 @@ extern "C" void app_main()
 
     /* Diagnostic: check NetworkCommissioning cluster on endpoint 0 */
     {
+        chip::DeviceLayer::PlatformMgr().LockChipStack();
         uint32_t ncFeatureMap = 0;
         auto ncStatus = chip::app::Clusters::NetworkCommissioning::Attributes::FeatureMap::Get(0, &ncFeatureMap);
+        chip::DeviceLayer::PlatformMgr().UnlockChipStack();
         ESP_LOGI(TAG, "DIAG: NetworkCommissioning FeatureMap=0x%lx (status=%d) [1=WiFi,2=Thread,4=Eth]",
                  (unsigned long)ncFeatureMap, (int)ncStatus);
     }
