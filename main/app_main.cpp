@@ -201,10 +201,6 @@ extern "C" void app_main()
         auto ncStatus = chip::app::Clusters::NetworkCommissioning::Attributes::FeatureMap::Get(0, &ncFeatureMap);
         ESP_LOGI(TAG, "DIAG: NetworkCommissioning FeatureMap=0x%lx (status=%d) [1=WiFi,2=Thread,4=Eth]",
                  (unsigned long)ncFeatureMap, (int)ncStatus);
-
-        bool concurrentConn = false;
-        auto ccStatus = chip::app::Clusters::GeneralCommissioning::Attributes::SupportsConcurrentConnection::Get(0, &concurrentConn);
-        ESP_LOGI(TAG, "DIAG: SupportsConcurrentConnection=%d (status=%d)", concurrentConn, (int)ccStatus);
     }
 
     /* Set initial position to fully open (0%) so attributes are not null */
