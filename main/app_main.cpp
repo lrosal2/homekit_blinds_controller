@@ -23,11 +23,9 @@
 
 #include <app/server/CommissioningWindowManager.h>
 #include <app/server/Server.h>
-#include <app-common/zap-generated/attributes/Accessors.h>
-#include <platform/PlatformManager.h>
 
 static const char *TAG = "app_main";
-uint16_t window_covering_endpoint_id = 0;
+uint16_t light_endpoint_id = 0;
 
 using namespace esp_matter;
 using namespace esp_matter::attribute;
@@ -35,6 +33,14 @@ using namespace esp_matter::endpoint;
 using namespace chip::app::Clusters;
 
 constexpr auto k_timeout_seconds = 300;
+
+#if CONFIG_ENABLE_ENCRYPTED_OTA
+extern const char decryption_key_start[] asm("_binary_esp_image_encryption_key_pem_start");
+extern const char decryption_key_end[] asm("_binary_esp_image_encryption_key_pem_end");
+
+static const char *s_decryption_key = decryption_key_start;
+static const uint16_t s_decryption_key_len = decryption_key_end - decryption_key_start;
+#endif // CONFIG_ENABLE_ENCRYPTED_OTA
 
 static void app_event_cb(const ChipDeviceEvent *event, intptr_t arg)
 {
@@ -76,6 +82,9 @@ static void app_event_cb(const ChipDeviceEvent *event, intptr_t arg)
                 constexpr auto kTimeoutSeconds = chip::System::Clock::Seconds16(k_timeout_seconds);
                 if (!commissionMgr.IsCommissioningWindowOpen())
                 {
+                    /* After removing last fabric, this example does not remove the Wi-Fi credentials
+                     * and still has IP connectivity so, only advertising on DNS-SD.
+                     */
                     CHIP_ERROR err = commissionMgr.OpenBasicCommissioningWindow(kTimeoutSeconds,
                                                     chip::CommissioningWindowAdvertisement::kDnssdOnly);
                     if (err != CHIP_NO_ERROR)
@@ -108,6 +117,8 @@ static void app_event_cb(const ChipDeviceEvent *event, intptr_t arg)
     }
 }
 
+// This callback is invoked when clients interact with the Identify Cluster.
+// In the callback implementation, an endpoint can identify itself. (e.g., by flashing an LED or light).
 static esp_err_t app_identification_cb(identification::callback_type_t type, uint16_t endpoint_id, uint8_t effect_id,
                                        uint8_t effect_variant, void *priv_data)
 {
@@ -115,12 +126,16 @@ static esp_err_t app_identification_cb(identification::callback_type_t type, uin
     return ESP_OK;
 }
 
+// This callback is called for every attribute update. The callback implementation shall
+// handle the desired attributes and return an appropriate error code. If the attribute
+// is not of your interest, please do not return an error code and strictly return ESP_OK.
 static esp_err_t app_attribute_update_cb(attribute::callback_type_t type, uint16_t endpoint_id, uint32_t cluster_id,
                                          uint32_t attribute_id, esp_matter_attr_val_t *val, void *priv_data)
 {
     esp_err_t err = ESP_OK;
 
     if (type == PRE_UPDATE) {
+        /* Driver update */
         app_driver_handle_t driver_handle = (app_driver_handle_t)priv_data;
         err = app_driver_attribute_update(driver_handle, endpoint_id, cluster_id, attribute_id, val);
     }
@@ -135,39 +150,47 @@ extern "C" void app_main()
     /* Initialize the ESP NVS layer */
     nvs_flash_init();
 
-    /* Initialize stepper motor driver */
-    app_driver_stepper_init();
-
-    /* Initialize button driver */
+    /* Initialize driver */
+    app_driver_handle_t light_handle = app_driver_light_init();
     app_driver_handle_t button_handle = app_driver_button_init();
     app_reset_button_register(button_handle);
 
     /* Create a Matter node and add the mandatory Root Node device type on endpoint 0 */
     node::config_t node_config;
+
+    // node handle can be used to add/modify other endpoints.
     node_t *node = node::create(&node_config, app_attribute_update_cb, app_identification_cb);
     ABORT_APP_ON_FAILURE(node != nullptr, ESP_LOGE(TAG, "Failed to create Matter node"));
 
-    /* Create a Window Covering endpoint */
-    window_covering_device::config_t wc_config;
-    endpoint_t *endpoint = window_covering_device::create(node, &wc_config, ENDPOINT_FLAG_NONE, NULL);
-    ABORT_APP_ON_FAILURE(endpoint != nullptr, ESP_LOGE(TAG, "Failed to create window covering endpoint"));
+    extended_color_light::config_t light_config;
+    light_config.on_off.on_off = DEFAULT_POWER;
+    light_config.on_off.lighting.start_up_on_off = nullptr;
+    light_config.level_control.current_level = DEFAULT_BRIGHTNESS;
+    light_config.level_control.on_level = DEFAULT_BRIGHTNESS;
+    light_config.level_control.lighting.start_up_current_level = DEFAULT_BRIGHTNESS;
+    light_config.color_control.color_mode = (uint8_t)ColorControl::ColorMode::kColorTemperature;
+    light_config.color_control.enhanced_color_mode = (uint8_t)ColorControl::ColorMode::kColorTemperature;
+    light_config.color_control.color_temperature.startup_color_temperature_mireds = nullptr;
 
-    window_covering_endpoint_id = endpoint::get_id(endpoint);
-    ESP_LOGI(TAG, "Window Covering created with endpoint_id %d", window_covering_endpoint_id);
+    // endpoint handles can be used to add/modify clusters.
+    endpoint_t *endpoint = extended_color_light::create(node, &light_config, ENDPOINT_FLAG_NONE, light_handle);
+    ABORT_APP_ON_FAILURE(endpoint != nullptr, ESP_LOGE(TAG, "Failed to create extended color light endpoint"));
 
-    /* Add lift feature first (required before position_aware_lift) */
-    cluster_t *wc_cluster = cluster::get(endpoint, WindowCovering::Id);
-    cluster::window_covering::feature::lift::config_t lift_config;
-    cluster::window_covering::feature::lift::add(wc_cluster, &lift_config);
+    light_endpoint_id = endpoint::get_id(endpoint);
+    ESP_LOGI(TAG, "Light created with endpoint_id %d", light_endpoint_id);
 
-    /* Add position-aware lift so Apple Home shows a position slider */
-    cluster::window_covering::feature::position_aware_lift::config_t pa_lift_config;
-    cluster::window_covering::feature::position_aware_lift::add(wc_cluster, &pa_lift_config);
+    /* Mark deferred persistence for some attributes that might be changed rapidly */
+    cluster_t *level_control_cluster = cluster::get(endpoint, LevelControl::Id);
+    attribute_t *current_level_attribute = attribute::get(level_control_cluster, LevelControl::Attributes::CurrentLevel::Id);
+    attribute::set_deferred_persistence(current_level_attribute);
 
-    /* Mark deferred persistence for position attribute (changes rapidly during movement) */
-    attribute_t *current_pos_attribute = attribute::get(wc_cluster,
-        WindowCovering::Attributes::CurrentPositionLiftPercent100ths::Id);
-    attribute::set_deferred_persistence(current_pos_attribute);
+    cluster_t *color_control_cluster = cluster::get(endpoint, ColorControl::Id);
+    attribute_t *current_x_attribute = attribute::get(color_control_cluster, ColorControl::Attributes::CurrentX::Id);
+    attribute::set_deferred_persistence(current_x_attribute);
+    attribute_t *current_y_attribute = attribute::get(color_control_cluster, ColorControl::Attributes::CurrentY::Id);
+    attribute::set_deferred_persistence(current_y_attribute);
+    attribute_t *color_temp_attribute = attribute::get(color_control_cluster, ColorControl::Attributes::ColorTemperatureMireds::Id);
+    attribute::set_deferred_persistence(color_temp_attribute);
 
 #if CHIP_DEVICE_CONFIG_ENABLE_THREAD
     /* Set OpenThread platform config */
@@ -179,45 +202,17 @@ extern "C" void app_main()
     set_openthread_platform_config(&config);
 #endif
 
-    /* Diagnostic: log CHIP network config at compile time */
-    ESP_LOGI(TAG, "DIAG: CHIP_DEVICE_CONFIG_ENABLE_THREAD=%d", CHIP_DEVICE_CONFIG_ENABLE_THREAD);
-#if defined(CHIP_DEVICE_CONFIG_ENABLE_WIFI)
-    ESP_LOGI(TAG, "DIAG: CHIP_DEVICE_CONFIG_ENABLE_WIFI=%d", CHIP_DEVICE_CONFIG_ENABLE_WIFI);
-#else
-    ESP_LOGI(TAG, "DIAG: CHIP_DEVICE_CONFIG_ENABLE_WIFI=undefined");
-#endif
-#if defined(CHIP_DEVICE_CONFIG_ENABLE_WIFI_STATION)
-    ESP_LOGI(TAG, "DIAG: CHIP_DEVICE_CONFIG_ENABLE_WIFI_STATION=%d", CHIP_DEVICE_CONFIG_ENABLE_WIFI_STATION);
-#else
-    ESP_LOGI(TAG, "DIAG: CHIP_DEVICE_CONFIG_ENABLE_WIFI_STATION=undefined");
-#endif
-
     /* Matter start */
     err = esp_matter::start(app_event_cb);
     ABORT_APP_ON_FAILURE(err == ESP_OK, ESP_LOGE(TAG, "Failed to start Matter, err:%d", err));
 
-    /* Diagnostic: check NetworkCommissioning cluster on endpoint 0 */
-    {
-        chip::DeviceLayer::PlatformMgr().LockChipStack();
-        uint32_t ncFeatureMap = 0;
-        auto ncStatus = chip::app::Clusters::NetworkCommissioning::Attributes::FeatureMap::Get(0, &ncFeatureMap);
-        chip::DeviceLayer::PlatformMgr().UnlockChipStack();
-        ESP_LOGI(TAG, "DIAG: NetworkCommissioning FeatureMap=0x%lx (status=%d) [1=WiFi,2=Thread,4=Eth]",
-                 (unsigned long)ncFeatureMap, (int)ncStatus);
-    }
+    /* Starting driver with default values */
+    app_driver_light_set_defaults(light_endpoint_id);
 
-    /* Set initial position to fully open (0%) so attributes are not null */
-    {
-        esp_matter_attr_val_t pos_val = esp_matter_nullable_uint16(0);
-        attribute::update(window_covering_endpoint_id, WindowCovering::Id,
-            WindowCovering::Attributes::CurrentPositionLiftPercent100ths::Id, &pos_val);
-        attribute::update(window_covering_endpoint_id, WindowCovering::Id,
-            WindowCovering::Attributes::TargetPositionLiftPercent100ths::Id, &pos_val);
-
-        esp_matter_attr_val_t pct_val = esp_matter_nullable_uint8(0);
-        attribute::update(window_covering_endpoint_id, WindowCovering::Id,
-            WindowCovering::Attributes::CurrentPositionLiftPercentage::Id, &pct_val);
-    }
+#if CONFIG_ENABLE_ENCRYPTED_OTA
+    err = esp_matter_ota_requestor_encrypted_init(s_decryption_key, s_decryption_key_len);
+    ABORT_APP_ON_FAILURE(err == ESP_OK, ESP_LOGE(TAG, "Failed to initialized the encrypted OTA, err: %d", err));
+#endif // CONFIG_ENABLE_ENCRYPTED_OTA
 
 #if CONFIG_ENABLE_CHIP_SHELL
     esp_matter::console::diagnostics_register_commands();

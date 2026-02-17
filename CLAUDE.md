@@ -11,23 +11,17 @@
 
 ## Project Overview
 - ESP32-C6 based window covering controller using ESP-IDF + esp-matter
-- 28BYJ-48 stepper motor via ULN2003 driver (pins D0=GPIO0, D1=GPIO1, D2=GPIO2, D3=GPIO21)
-- 2048 steps = 1 full revolution = full travel
-- Matter Window Covering cluster: position in percent100ths (0-10000)
+- Currently at: Light example over Thread (foundation step)
+- Next: Swap to window covering once Thread pairing is confirmed working
 
 ## Build System
 - ESP-IDF v5.2.3 with esp-matter
-- When PRIV_REQUIRES is specified in idf_component_register, ONLY those components get include paths
-- `app_reset` is a component under `${ESP_MATTER_PATH}/examples/common`, not just a header
+- Target: Seeed XIAO ESP32-C6
+- sdkconfig.defaults.esp32c6 contains Thread config (based on official esp-matter c6_thread)
+- Build: delete build/ and sdkconfig first for clean rebuild, then `idf.py set-target esp32c6 build`
 
 ## Key Files
-- `main/app_driver.cpp` — stepper wiring to position commands
-- `main/app_main.cpp` — Matter device setup, stepper init
-- `main/app_priv.h` — private declarations
-- `components/stepper/` — stepper motor driver component
-
-## Architecture Notes
-- Stepper runs on dedicated FreeRTOS task (priority 5, 4KB stack)
-- Queue depth 1 with xQueueOverwrite — only latest target position matters
-- stepper_driver.c yields every 20 steps (vTaskDelay(1)) — required for single-core ESP32-C6
-- CHIP stack must be locked (LockChipStack/UnlockChipStack) when updating attributes from stepper task
+- `main/app_driver.cpp` — light driver (stock esp-matter example)
+- `main/app_main.cpp` — Matter device setup (stock esp-matter light example)
+- `main/app_priv.h` — private declarations + OpenThread config macros
+- `sdkconfig.defaults.esp32c6` — Thread config (official esp-matter c6_thread reference)
